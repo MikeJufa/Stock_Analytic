@@ -1,0 +1,67 @@
+SET ThousandSep=',';
+SET DecimalSep='.';
+SET MoneyThousandSep=',';
+SET MoneyDecimalSep='.';
+SET MoneyFormat='$#,##0.00;-$#,##0.00';
+SET TimeFormat='h:mm:ss TT';
+SET DateFormat='M/D/YYYY';
+SET TimestampFormat='M/D/YYYY h:mm:ss[.fff] TT';
+SET FirstWeekDay=6;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='en-US';
+SET CreateSearchIndexOnReload=1;
+SET MonthNames='Jan;Feb;Mar;Apr;May;Jun;Jul;Aug;Sep;Oct;Nov;Dec';
+SET LongMonthNames='January;February;March;April;May;June;July;August;September;October;November;December';
+SET DayNames='Mon;Tue;Wed;Thu;Fri;Sat;Sun';
+SET LongDayNames='Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+
+
+//Updated on Nov. 15, 2019
+
+SET vSourceData = 'lib://AttachedFiles/';
+SET vMakeDate = num(Today());
+SET vNum = Num($1,'#,##0.00');
+SET v%Num = Num($1,'#,##0.0%');
+SET vMinDate = '=Num(Min(Date))';
+SET vMaxDate = '=Num(Max(Date))';
+
+
+
+FOR EACH vStock in 'NFLX', 'TSLA'
+  StockList:
+  Load
+        *
+      , Date(Date,'MMM D,YY')&'('&WeekDay&')' as DateWeekDay
+  ;
+  Load
+        *
+      , '$(vStock)' as StockName
+      , Year(Date) as ReportYear
+      , Date(MonthStart(Date),'MMM-YYYY') as ReportYearMonth
+      , Year(Date)&'-'&Week(Date) as ReportWeek
+      , Num(Date) as DateNum
+      , If(Open<Close, Dual('Up',1), Dual('Dn',-1)) as UpDnFlag
+      , WeekDay(Date) as WeekDay
+      , $(vNum((Open-Close)*-1)) as OpenCloseDiff
+      , $(v%Num((Open-Close)*-1/Open)) as OpenCloseDiff%
+      , $(vNum(High-Low)) as HighLowDiff
+      , $(v%Num((High-Low)/High)) as HighLowDiff%
+  ;
+  LOAD
+        Date
+      , $(vNum(Open)) as Open
+      , $(vNum(High)) as High
+      , $(vNum(Low)) as Low
+      , $(vNum(Close)) as Close
+      , $(vNum([Adj Close])) as [Adj Close]
+      , Volume
+  FROM [$(vSourceData)$(vStock).csv]
+  (txt, codepage is 28591, embedded labels, delimiter is ',', msq)
+  ;
+
+NEXT vStock
+
+STORE StockList INTO [$(vSourceData)Stock.qvd](qvd);
