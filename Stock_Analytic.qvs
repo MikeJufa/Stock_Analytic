@@ -19,7 +19,7 @@ SET LongDayNames='Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday';
 SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
 
 
-//Updated on Nov. 15, 2019
+//Updated on Dec. 31, 2019
 
 SET vSourceData = 'lib://AttachedFiles/';
 SET vMakeDate = num(Today());
@@ -27,15 +27,13 @@ SET vNum = Num($1,'#,##0.00');
 SET v%Num = Num($1,'#,##0.0%');
 SET vMinDate = '=Num(Min(Date))';
 SET vMaxDate = '=Num(Max(Date))';
+SET vQVDName = 'Stock';
 
+LET vTodayDate = num(Today());
 
-
-FOR EACH vStock in 'NFLX', 'TSLA'
+//FOR EACH vStock in 'NFLX'
+//,'TSLA','GOOG','AAPL','MSFT','FB','AMZN'
   StockList:
-  Load
-        *
-      , Date(Date,'MMM D,YY')&'('&WeekDay&')' as DateWeekDay
-  ;
   Load
         *
       , '$(vStock)' as StockName
@@ -49,6 +47,8 @@ FOR EACH vStock in 'NFLX', 'TSLA'
       , $(v%Num((Open-Close)*-1/Open)) as OpenCloseDiff%
       , $(vNum(High-Low)) as HighLowDiff
       , $(v%Num((High-Low)/High)) as HighLowDiff%
+      , Open - Peek(Close) as OvernightDiff
+      , (Open - Peek(Close))/Open as OvernightDiff%
   ;
   LOAD
         Date
@@ -62,6 +62,6 @@ FOR EACH vStock in 'NFLX', 'TSLA'
   (txt, codepage is 28591, embedded labels, delimiter is ',', msq)
   ;
 
-NEXT vStock
+//NEXT vStock
 
-STORE StockList INTO [$(vSourceData)Stock.qvd](qvd);
+STORE StockList INTO [$(vSourceData)$(vQVDName).qvd](qvd);
