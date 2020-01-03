@@ -19,17 +19,62 @@ SET LongDayNames='Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday';
 SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
 
 
-//Updated on Dec. 31, 2019
+//Updated on Jan. 2, 2020
 
 SET vSourceData = 'lib://AttachedFiles/';
-SET vMakeDate = num(Today());
-SET vNum = Num($1,'#,##0.00');
+SET vNum = Num($1,'#,##0.0');
 SET v%Num = Num($1,'#,##0.0%');
 SET vMinDate = '=Num(Min(Date))';
 SET vMaxDate = '=Num(Max(Date))';
 SET vQVDName = 'Stock';
 
 LET vTodayDate = num(Today());
+
+
+
+Incremental:
+Load
+	*
+Where DateNum>$(vTodayDate)
+;
+Load
+        *
+      , '$(vStock)' as StockName
+      , Year(Date) as ReportYear
+      , Date(MonthStart(Date),'MMM-YYYY') as ReportYearMonth
+      , Year(Date)&'-'&Week(Date) as ReportWeek
+      , Num(Date) as DateNum
+      , If(Open<Close, Dual('Up',1), Dual('Dn',-1)) as UpDnFlag
+      , WeekDay(Date) as WeekDay
+      , $(vNum((Open-Close)*-1)) as OpenCloseDiff
+      , $(v%Num((Open-Close)*-1/Open)) as OpenCloseDiff%
+      , $(vNum(High-Low)) as HighLowDiff
+      , $(v%Num((High-Low)/High)) as HighLowDiff%
+      , Open - Peek(Close) as OvernightDiff
+      , (Open - Peek(Close))/Open as OvernightDiff%
+      , Date(floor(Date),'YYYY.MM.DD') as [Trade Date]
+;
+LOAD
+        Date
+      , $(vNum(Open)) as Open
+      , $(vNum(High)) as High
+      , $(vNum(Low)) as Low
+      , $(vNum(Close)) as Close
+      , $(vNum([Adj Close])) as [Adj Close]
+      , Volume
+FROM [$(vSourceData)$(vStock).csv]
+(txt, codepage is 28591, embedded labels, delimiter is ',', msq)
+;
+
+Concatenate
+Load * FROM [$(vSourceData)$(vStock).qvd](qvd);
+
+Store Incremental INTO [$(vSourceData)$(vStock).qvd](qvd);
+
+Drop Table Incremental;
+
+
+
 
 //FOR EACH vStock in 'NFLX'
 //,'TSLA','GOOG','AAPL','MSFT','FB','AMZN'
@@ -49,6 +94,7 @@ LET vTodayDate = num(Today());
       , $(v%Num((High-Low)/High)) as HighLowDiff%
       , Open - Peek(Close) as OvernightDiff
       , (Open - Peek(Close))/Open as OvernightDiff%
+      , Date(floor(Date),'YYYY.MM.DD') as [Trade Date]
   ;
   LOAD
         Date
@@ -58,10 +104,35 @@ LET vTodayDate = num(Today());
       , $(vNum(Close)) as Close
       , $(vNum([Adj Close])) as [Adj Close]
       , Volume
-  FROM [$(vSourceData)$(vStock).csv]
-  (txt, codepage is 28591, embedded labels, delimiter is ',', msq)
-  ;
+FROM [$(vSourceData)$(vStock).qvd](qvd);
 
 //NEXT vStock
 
-STORE StockList INTO [$(vSourceData)$(vQVDName).qvd](qvd);
+STORE StockList INTO [$(vSourceData)$(vStock).qvd](qvd);
+
+
+
+//Date Ranges
+Ranges:
+Load
+	  Range
+    , Date(Evaluate(RangeStart)) as RangeStart
+    , Date(Evaluate(RangeEnd)) as RangeEnd
+;
+Load * Inline
+[
+Range; RangeStart; RangeEnd
+This Month; MonthStart(vTodayDate); MonthEnd(vTodayDate)
+Past 3 Month; MonthStart(vTodayDate,-3); MonthEnd(vTodayDate)
+Past 6 Month; MonthStart(vTodayDate,-6); MonthEnd(vTodayDate)
+Past 1 Year; (vTodayDate-365); vTodayDate
+](delimiter is ';')
+;
+
+Join(Ranges)
+
+IntervalMatch([Trade Date])
+
+Load RangeStart, RangeEnd Resident Ranges;
+
+Drop Fields RangeStart, RangeEnd;
